@@ -6,6 +6,7 @@ import '../command/command_page.dart';
 import '../event_log/event_log_page.dart';
 import '../motor_debug/motor_debug_page.dart';
 import '../packet_monitor/packet_monitor_page.dart';
+import '../sensor_debug/sensor_debug_page.dart';
 import '../test_automation/test_automation_page.dart';
 import '../../core/ble/ble_manager.dart';
 import '../../core/export/csv_export_service.dart';
@@ -609,6 +610,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
       case AppMenu.motorDebug:
         return const MotorDebugPage();
+
+      case AppMenu.sensorDebug:
+        return const SensorDebugPage();
 
       case AppMenu.testAutomation:
         return const TestAutomationPage();
