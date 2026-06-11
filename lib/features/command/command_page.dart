@@ -7,9 +7,8 @@ class CommandPage extends StatefulWidget {
   final VoidCallback onGetDeliveryStatus;
   final void Function(double doseU) onBolus;
   final VoidCallback onStopBolus;
-  final VoidCallback onMockOcclusion;
-  final VoidCallback onMockLowBattery;
   final void Function(List<int> rawPacket) onRawPacketSend;
+  final VoidCallback onGetPumpCheck;
 
   const CommandPage({
     super.key,
@@ -17,9 +16,8 @@ class CommandPage extends StatefulWidget {
     required this.onGetDeliveryStatus,
     required this.onBolus,
     required this.onStopBolus,
-    required this.onMockOcclusion,
-    required this.onMockLowBattery,
     required this.onRawPacketSend,
+    required this.onGetPumpCheck,
   });
 
   @override
@@ -118,6 +116,10 @@ class _CommandPageState extends State<CommandPage> {
                       label: 'Sync Time',
                       onPressed: () {},
                     ),
+                    _CommandButton(
+                      label: 'Get Pump Check',
+                      onPressed: widget.onGetPumpCheck,
+                    ),
                   ],
                 ),
               ),
@@ -197,22 +199,6 @@ class _CommandPageState extends State<CommandPage> {
                     _CommandButton(label: 'Suspend', onPressed: () {}),
                     _CommandButton(label: 'Resume', onPressed: () {}),
                     _CommandButton(label: 'Enter DFU', onPressed: () {}),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _CommandSection(
-                  title: 'Alarm / Mock Events',
-                  children: [
-                    _CommandButton(
-                      label: 'Mock Occlusion',
-                      onPressed: widget.onMockOcclusion,
-                    ),
-                    _CommandButton(
-                      label: 'Mock Low Battery',
-                      onPressed: widget.onMockLowBattery,
-                    ),
                   ],
                 ),
               ),

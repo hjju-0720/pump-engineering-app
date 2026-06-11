@@ -9,6 +9,10 @@ class DeviceStatus {
   final double lastBolusUnits;
   final double dailyTotalUnits;
 
+  final String modelName;
+  final int? protocolVersion;
+  final int? productCode;
+
   const DeviceStatus({
     required this.connectionState,
     required this.deviceName,
@@ -19,19 +23,25 @@ class DeviceStatus {
     required this.therapyState,
     required this.lastBolusUnits,
     required this.dailyTotalUnits,
+    required this.modelName,
+    required this.protocolVersion,
+    required this.productCode,
   });
 
   factory DeviceStatus.mock() {
     return const DeviceStatus(
-      connectionState: 'Mock Connected',
-      deviceName: 'MockPump_1234',
-      firmwareVersion: '1.0.5',
-      batteryPercent: 85,
-      reservoirUnits: 120.3,
-      rssi: -48,
-      therapyState: 'IDLE',
+      connectionState: 'Disconnected',
+      deviceName: '-',
+      firmwareVersion: '-',
+      batteryPercent: 0,
+      reservoirUnits: 0.0,
+      rssi: 0,
+      therapyState: 'UNKNOWN',
       lastBolusUnits: 0.0,
       dailyTotalUnits: 0.0,
+      modelName: '-',
+      protocolVersion: null,
+      productCode: null,
     );
   }
 
@@ -45,6 +55,9 @@ class DeviceStatus {
     String? therapyState,
     double? lastBolusUnits,
     double? dailyTotalUnits,
+    String? modelName,
+    int? protocolVersion,
+    int? productCode,
   }) {
     return DeviceStatus(
       connectionState: connectionState ?? this.connectionState,
@@ -56,6 +69,9 @@ class DeviceStatus {
       therapyState: therapyState ?? this.therapyState,
       lastBolusUnits: lastBolusUnits ?? this.lastBolusUnits,
       dailyTotalUnits: dailyTotalUnits ?? this.dailyTotalUnits,
+      modelName: modelName ?? this.modelName,
+      protocolVersion: protocolVersion ?? this.protocolVersion,
+      productCode: productCode ?? this.productCode,
     );
   }
 }

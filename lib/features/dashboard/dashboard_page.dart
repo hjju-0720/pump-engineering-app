@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'app_menu.dart';
 import '../command/command_page.dart';
 import '../event_log/event_log_page.dart';
@@ -10,7 +11,6 @@ import '../sensor_debug/sensor_debug_page.dart';
 import '../test_automation/test_automation_page.dart';
 import '../../core/ble/ble_manager.dart';
 import '../../core/export/csv_export_service.dart';
-import '../../core/mock/mock_pump_device.dart';
 import '../../core/protocol/command_builder.dart';
 import '../../core/protocol/packet_type.dart';
 import '../../core/protocol/pump_packet.dart';
@@ -46,11 +46,6 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _isScanning = false;
   bool _isBleConnected = false;
 
-  final MockPumpDevice _mockPumpDevice = MockPumpDevice();
-
-  StreamSubscription<List<int>>? _mockRxSubscription;
-  bool _useMockPump = true;
-
   final CsvExportService _csvExportService = CsvExportService();
 
   AppMenu _selectedMenu = AppMenu.dashboard;
@@ -61,15 +56,22 @@ class _DashboardPageState extends State<DashboardPage> {
 
     _rxSubscription = _bleManager.rxStream.listen((data) {
       _receivePacket('BLE_RX', data);
-      _updateMockStateFromRx(data);
-    });
-
-    _mockRxSubscription = _mockPumpDevice.rxStream.listen((data) {
-      _receivePacket('MOCK_RX', data);
-      _updateMockStateFromRx(data);
+      _updateDeviceStateFromRx(data);
     });
 
     _bleManager.scanResults.listen((results) {
+
+      debugPrint(
+          'SCAN RESULTS COUNT = ${results.length}');
+
+      for (final r in results) {
+        debugPrint(
+          '${r.device.platformName} '
+              '${r.device.remoteId} '
+              'RSSI=${r.rssi}',
+        );
+      }
+
       setState(() {
         _scanResults = results;
       });
@@ -79,8 +81,6 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void dispose() {
     _rxSubscription?.cancel();
-    _mockRxSubscription?.cancel();
-    _mockPumpDevice.dispose();
     super.dispose();
   }
 
@@ -90,6 +90,13 @@ class _DashboardPageState extends State<DashboardPage> {
 
       setState(() {
         _isBleConnected = true;
+        _deviceStatus = _deviceStatus.copyWith(
+          connectionState: 'Connected',
+          deviceName: result.device.platformName.isNotEmpty
+              ? result.device.platformName
+              : result.device.remoteId.toString(),
+          rssi: result.rssi,
+        );
       });
 
       _eventLogs.insert(
@@ -119,6 +126,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
     setState(() {
       _isBleConnected = false;
+      _deviceStatus = _deviceStatus.copyWith(
+        connectionState: 'Disconnected',
+        deviceName: '-',
+        therapyState: 'UNKNOWN',
+      );
+
       _eventLogs.insert(
         0,
         EventLog(
@@ -133,100 +146,89 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _writeBlePacket(String label, List<int> data) async {
     _sendPacket(label, data);
 
-    if (_isBleConnected) {
-      try {
-        await _bleManager.write(data);
-      } catch (e) {
-        setState(() {
-          _eventLogs.insert(
-            0,
-            EventLog(
-              timestamp: DateTime.now(),
-              level: 'ERROR',
-              message: 'BLE_WRITE_FAILED $e',
-            ),
-          );
-        });
-      }
-
+    if (!_isBleConnected) {
+      setState(() {
+        _eventLogs.insert(
+          0,
+          EventLog(
+            timestamp: DateTime.now(),
+            level: 'ERROR',
+            message: 'BLE_WRITE_SKIPPED: device is not connected',
+          ),
+        );
+      });
       return;
     }
 
-    if (_useMockPump) {
-      await _mockPumpDevice.handleTx(data);
+    try {
+      await _bleManager.write(data);
+    } catch (e) {
+      setState(() {
+        _eventLogs.insert(
+          0,
+          EventLog(
+            timestamp: DateTime.now(),
+            level: 'ERROR',
+            message: 'BLE_WRITE_FAILED $e',
+          ),
+        );
+      });
     }
   }
 
-  Future<void> _showScanDialog() async {
-    setState(() {
-      _isScanning = true;
-      _scanResults = [];
-    });
-
-    await _bleManager.startScan();
-
-    setState(() {
-      _isScanning = false;
-    });
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('BLE Scan Results'),
-          content: SizedBox(
-            width: 520,
-            height: 420,
-            child: _scanResults.isEmpty
-                ? const Center(
-              child: Text('No BLE devices found.'),
-            )
-                : ListView.separated(
-              itemCount: _scanResults.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (context, index) {
-                final result = _scanResults[index];
-                final name = result.device.platformName.isNotEmpty
-                    ? result.device.platformName
-                    : 'Unknown Device';
-
-                return ListTile(
-                  title: Text(name),
-                  subtitle: Text(
-                    '${result.device.remoteId}\nRSSI: ${result.rssi} dBm',
-                  ),
-                  isThreeLine: true,
-                  trailing: ElevatedButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                      await _connectBle(result);
-                    },
-                    child: const Text('Connect'),
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
+  String _pumpModelName(int modelCode) {
+    switch (modelCode) {
+      case 0x05:
+        return 'Dana RS Pump';
+      case 0x06:
+        return 'Dana RS Easy';
+      case 0x07:
+        return 'Dana-i';
+      default:
+        return 'Unknown Model (0x${modelCode.toRadixString(16).padLeft(2, '0').toUpperCase()})';
+    }
   }
 
-  void _updateMockStateFromRx(List<int> data) {
+  String _therapyStateFromInitialStatus(
+      int status,
+      int currentBasalRate,
+      ) {
+    if ((status & 0x01) != 0) return 'SUSPENDED';
+    if ((status & 0x02) != 0) return 'BOLUS_BLOCK';
+    if ((status & 0x04) != 0) return 'EXTENDED_BOLUS';
+    if ((status & 0x08) != 0) return 'DUAL_BOLUS';
+    if ((status & 0x10) != 0) return 'TEMP_BASAL';
+
+    if (currentBasalRate > 0) {
+      return 'BASAL_RUNNING';
+    }
+
+    return 'IDLE';
+  }
+
+  void _updateDeviceStateFromRx(List<int> data) {
     PumpPacket? packet;
 
     try {
       packet = PumpPacket.parse(data);
     } catch (_) {
       return;
+    }
+
+    if (packet.type == PacketType.response && packet.opCode == 0x21) {
+      if (packet.parameters.length >= 3) {
+        final modelCode = packet.parameters[0];
+        final protocolVersion = packet.parameters[1];
+        final productCode = packet.parameters[2];
+
+        setState(() {
+          _deviceStatus = _deviceStatus.copyWith(
+            modelName: _pumpModelName(modelCode),
+            protocolVersion: protocolVersion,
+            productCode: productCode,
+          );
+        });
+      }
     }
 
     if (packet.type == PacketType.response && packet.opCode == 0x4A) {
@@ -255,6 +257,35 @@ class _DashboardPageState extends State<DashboardPage> {
       }
     }
 
+    if (packet.type == PacketType.response && packet.opCode == 0x02) {
+      if (packet.parameters.length >= 18) {
+        final status = packet.parameters[0];
+
+        final dailyDeliveryRate =
+        packet.parameters[1] | (packet.parameters[2] << 8);
+
+        final reservoirRate =
+        packet.parameters[5] | (packet.parameters[6] << 8);
+
+        final currentBasalRate =
+        packet.parameters[7] | (packet.parameters[8] << 8);
+
+        final batteryRatio = packet.parameters[10];
+
+        setState(() {
+          _deviceStatus = _deviceStatus.copyWith(
+            batteryPercent: batteryRatio,
+            reservoirUnits: reservoirRate / 100.0,
+            dailyTotalUnits: dailyDeliveryRate / 100.0,
+            therapyState: _therapyStateFromInitialStatus(
+              status,
+              currentBasalRate,
+            ),
+          );
+        });
+      }
+    }
+
     if (packet.type == PacketType.notify && packet.opCode == 0x03) {
       setState(() {
         _deviceStatus = _deviceStatus.copyWith(
@@ -262,6 +293,89 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       });
     }
+  }
+
+  Future<void> _showScanDialog() async {
+    await Permission.bluetoothScan.request();
+    await Permission.bluetoothConnect.request();
+    await Permission.location.request();
+
+    if (!mounted) return;
+
+    await _bleManager.startScan();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('BLE Scan Results'),
+          content: SizedBox(
+            width: 560,
+            height: 460,
+            child: StreamBuilder<List<ScanResult>>(
+              stream: _bleManager.scanResults,
+              initialData: _scanResults,
+              builder: (context, snapshot) {
+                final results = snapshot.data ?? [];
+
+                if (results.isEmpty) {
+                  return const Center(
+                    child: Text('Scanning...\nNo BLE devices found yet.'),
+                  );
+                }
+
+                return ListView.separated(
+                  itemCount: results.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (context, index) {
+                    final result = results[index];
+
+                    final advName = result.advertisementData.advName;
+                    final platformName = result.device.platformName;
+
+                    final name = advName.isNotEmpty
+                        ? advName
+                        : platformName.isNotEmpty
+                        ? platformName
+                        : 'Unknown Device';
+
+                    return ListTile(
+                      title: Text(name),
+                      subtitle: Text(
+                        '${result.device.remoteId}\n'
+                            'RSSI: ${result.rssi} dBm\n'
+                            'Service UUIDs: ${result.advertisementData.serviceUuids}',
+                      ),
+                      isThreeLine: true,
+                      trailing: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.of(dialogContext).pop();
+                          await _connectBle(result);
+                        },
+                        child: const Text('Connect'),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await _bleManager.stopScan();
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+              },
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    ).then((_) async {
+      await _bleManager.stopScan();
+    });
   }
 
   Future<void> _exportLogs() async {
@@ -439,6 +553,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: CommandPanel(
+                      onGetPumpCheck: () => _writeBlePacket(
+                        'GET_PUMP_CHECK',
+                        _commandBuilder.getPumpCheck().encode(),
+                      ),
                       onExportLogs: _exportLogs,
                       onGetStatus: () => _writeBlePacket(
                         'GET_STATUS',
@@ -460,26 +578,6 @@ class _DashboardPageState extends State<DashboardPage> {
                         'STOP_BOLUS',
                         _commandBuilder.stopStepBolus().encode(),
                       ),
-                      onMockResponse: () {
-                        final packet = const PumpPacket(
-                          type: PacketType.response,
-                          opCode: 0x4A,
-                          parameters: [0x00],
-                        ).encode();
-
-                        _receivePacket('RSP_BOLUS_OK', packet);
-                      },
-                      onMockNotify: () {
-                        final packet = const PumpPacket(
-                          type: PacketType.notify,
-                          opCode: 0x03,
-                          parameters: [0x03, 0x00],
-                        ).encode();
-
-                        _receivePacket('NTF_OCCLUSION', packet);
-                      },
-                      onMockOcclusion: _mockPumpDevice.emitOcclusionAlarm,
-                      onMockLowBattery: _mockPumpDevice.emitLowBatteryAlarm,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -568,6 +666,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
       case AppMenu.command:
         return CommandPage(
+          onGetPumpCheck: () => _writeBlePacket(
+            'GET_PUMP_CHECK',
+            _commandBuilder.getPumpCheck().encode(),
+          ),
           onGetStatus: () => _writeBlePacket(
             'GET_STATUS',
             _commandBuilder.getStatus().encode(),
@@ -588,8 +690,6 @@ class _DashboardPageState extends State<DashboardPage> {
             'STOP_BOLUS',
             _commandBuilder.stopStepBolus().encode(),
           ),
-          onMockOcclusion: _mockPumpDevice.emitOcclusionAlarm,
-          onMockLowBattery: _mockPumpDevice.emitLowBatteryAlarm,
           onRawPacketSend: (rawPacket) => _writeBlePacket(
             'RAW_PACKET',
             rawPacket,

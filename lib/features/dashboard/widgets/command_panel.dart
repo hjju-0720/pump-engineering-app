@@ -6,11 +6,8 @@ class CommandPanel extends StatefulWidget {
   final VoidCallback onGetDeliveryStatus;
   final void Function(double doseU) onBolus;
   final VoidCallback onStopBolus;
-  final VoidCallback onMockResponse;
-  final VoidCallback onMockNotify;
-  final VoidCallback onMockOcclusion;
-  final VoidCallback onMockLowBattery;
   final VoidCallback onExportLogs;
+  final VoidCallback onGetPumpCheck;
 
   const CommandPanel({
     super.key,
@@ -18,11 +15,8 @@ class CommandPanel extends StatefulWidget {
     required this.onGetDeliveryStatus,
     required this.onBolus,
     required this.onStopBolus,
-    required this.onMockResponse,
-    required this.onMockNotify,
-    required this.onMockOcclusion,
-    required this.onMockLowBattery,
     required this.onExportLogs,
+    required this.onGetPumpCheck,
   });
 
   @override
@@ -94,24 +88,12 @@ class _CommandPanelState extends State<CommandPanel> {
                   child: const Text('Sync Time'),
                 ),
                 ElevatedButton(
-                  onPressed: widget.onMockResponse,
-                  child: const Text('Mock RX Response'),
-                ),
-                ElevatedButton(
-                  onPressed: widget.onMockNotify,
-                  child: const Text('Mock RX Notify'),
-                ),
-                ElevatedButton(
-                  onPressed: widget.onMockOcclusion,
-                  child: const Text('Mock Occlusion'),
-                ),
-                ElevatedButton(
-                  onPressed: widget.onMockLowBattery,
-                  child: const Text('Mock Low Battery'),
-                ),
-                ElevatedButton(
                   onPressed: widget.onExportLogs,
                   child: const Text('Export CSV'),
+                ),
+                ElevatedButton(
+                  onPressed: widget.onGetPumpCheck,
+                  child: const Text('Pump Check'),
                 ),
               ],
             ),

@@ -14,6 +14,8 @@ class BleManager {
 
   BluetoothDevice? get connectedDevice => _device;
 
+  final List<StreamSubscription> _notifySubscriptions = [];
+
   Future<void> startScan() async {
     await FlutterBluePlus.startScan(
       timeout: const Duration(seconds: 5),
@@ -42,18 +44,36 @@ class BleManager {
 
     for (final service in services) {
       for (final c in service.characteristics) {
-        if (_writeCharacteristic == null &&
-            (c.properties.write || c.properties.writeWithoutResponse)) {
+        print(
+          'CHAR=${c.uuid.str} '
+              'R=${c.properties.read} '
+              'W=${c.properties.write} '
+              'WN=${c.properties.writeWithoutResponse} '
+              'N=${c.properties.notify} '
+              'I=${c.properties.indicate}',
+        );
+
+        if (c.uuid.str.toLowerCase() ==
+            '12345678-1234-5678-1234-56789abcdef1') {
+
           _writeCharacteristic = c;
+
+          print(
+            'WRITE CHARACTERISTIC FOUND = ${c.uuid.str}',
+          );
         }
 
         if (c.properties.notify || c.properties.indicate) {
           await c.setNotifyValue(true);
+          final sub =
           c.lastValueStream.listen((value) {
+
             if (value.isNotEmpty) {
               _rxController.add(value);
             }
           });
+
+          _notifySubscriptions.add(sub);
         }
       }
     }
@@ -70,8 +90,15 @@ class BleManager {
   }
 
   Future<void> disconnect() async {
+
+    for (final sub in _notifySubscriptions) {
+      await sub.cancel();
+    }
+
+    _notifySubscriptions.clear();
+
     await _device?.disconnect();
+
     _device = null;
-    _writeCharacteristic = null;
   }
 }

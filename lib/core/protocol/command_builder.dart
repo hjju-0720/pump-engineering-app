@@ -15,6 +15,13 @@ class CommandBuilder {
         opCode: OpCode.deliveryStatus,
       );
 
+  PumpPacket getPumpCheck() {
+    return const PumpPacket(
+      type: PacketType.command,
+      opCode: OpCode.getPumpCheck,
+    );
+  }
+
   PumpPacket startStepBolus({required int doseInHundredthsUnit, int speed = 0}) {
     return PumpPacket(
       type: PacketType.command,
